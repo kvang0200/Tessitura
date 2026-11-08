@@ -263,6 +263,20 @@ kbd{font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:5px;bac
 ::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--panel3);border-radius:10px;border:3px solid transparent;background-clip:padding-box}
 
 [hidden]{display:none!important}
+.slots{display:flex;flex-direction:column;gap:10px;margin-top:18px}
+.slot{display:flex;align-items:center;gap:14px;padding:14px;border-radius:14px;border:1.5px dashed var(--line2);background:var(--panel2);transition:.15s}
+.slot.has{border-style:solid;border-color:rgba(94,234,212,.45);background:rgba(94,234,212,.05)}
+.slot.over{border-color:var(--accent);background:rgba(255,138,92,.08)}
+.slot-ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--panel3);font-size:20px;flex:none}
+.slot-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.slot-tx b{font-size:14.5px}
+.slot-d{font-size:12.5px;color:var(--muted);line-height:1.4}
+.slot-f{font-size:12px;color:var(--good);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slot-f:empty{display:none}
+.slot-badge{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:6px;background:var(--panel3);color:var(--muted);vertical-align:2px;margin-left:4px}
+.slot-badge.best{background:rgba(255,196,107,.15);color:var(--accent2)}
+.slot-x{width:28px;height:28px;border-radius:8px;color:var(--muted)}.slot-x:hover{color:var(--bad);background:rgba(251,113,133,.1)}
+@media (max-width:640px){.slot{flex-wrap:wrap}.slot-tx{flex-basis:calc(100% - 60px)}}
 .rt-step{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;padding:14px;border-radius:14px;background:var(--panel2);border:1px solid var(--line);transition:.15s;min-width:0}
 .rt-step:hover{border-color:var(--line2);background:var(--panel3)}
 .rt-step b{font-size:13.5px}.rt-step span:last-child{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
@@ -369,9 +383,10 @@ kbd{font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:5px;bac
     <!-- PRACTICE -->
     <section class="view active" id="view-practice">
       <aside class="library">
-        <button class="upload-card" id="uploadBtn"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 16V4"/><path d="M6 10l6-6 6 6"/><path d="M4 20h16"/></svg></span><span><b>Upload a song</b><span>MP3, WAV, M4A… or drop it anywhere. Add a vocal stem too for best accuracy</span></span></button>
+        <button class="upload-card" id="uploadBtn"><span class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 16V4"/><path d="M6 10l6-6 6 6"/><path d="M4 20h16"/></svg></span><span><b>Add a song</b><span>Vocals, instrumental, or the full song: MP3, WAV, M4A. You can also drop files here.</span></span></button>
         <input type="file" id="fileIn" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" multiple hidden>
         <input type="file" id="stemIn" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" hidden>
+        <input type="file" id="instIn" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" hidden>
         <div class="lib-head"><h3>Library</h3><button class="btn ghost sm" id="newSongBtn">+ Custom melody</button></div>
         <div id="libList" style="display:flex;flex-direction:column;gap:18px"></div>
       </aside>
@@ -661,7 +676,7 @@ async function pitchPass(sp,sr,prog,stage){
   for(let f=0;f<nF;f++){let s=0;const o=f*hop;for(let i=0;i<W;i++)s+=x[o+i]*x[o+i];rms[f]=Math.sqrt(s/W)}
   const sorted=Array.from(rms).sort((a,b)=>a-b);const p95=sorted[Math.floor(sorted.length*.95)]||0;
   const gate=Math.max(1e-4,p95*.14);
-  const d=new Float32Array(maxT+2),raw=new Float32Array(nF).fill(NaN);
+  const d=new Float32Array(maxT+2),raw=new Float32Array(nF).fill(NaN),clar=new Float32Array(nF); // clar: how clearly pitched (0–1)
   for(let f=0;f<nF;f++){
     if(rms[f]>=gate){
       const o=f*hop,cf=coarse[clamp(Math.round((o+W/2)*D/H),0,frames-1)];
@@ -674,7 +689,7 @@ async function pitchPass(sp,sr,prog,stage){
         let [mv,mt]=near(tc);
         // octave check: if the wave clearly repeats at double the period, the note is an octave lower
         if(2*tc*1.09<top+1){const [m2,t2]=near(2*tc);if(t2>0&&m2<.2&&m2<mv*.4){mv=m2;mt=t2}}
-        tau=mv<=.45?mt:-1;
+        tau=mv<=.45?mt:-1;if(tau>0)clar[f]=1-mv;
       }
       if(tau>0){
         let bt=tau;if(tau<maxT){const a=d[tau-1],c=d[tau+1],mm=d[tau],den=a+c-2*mm;if(den)bt=tau+(a-c)/(2*den)}
@@ -687,7 +702,7 @@ async function pitchPass(sp,sr,prog,stage){
   const med=new Float32Array(nF).fill(NaN);
   for(let f=0;f<nF;f++){if(isNaN(raw[f]))continue;const w=[];for(let j=-2;j<=2;j++){const v=raw[f+j];if(v===v&&v!==undefined)w.push(v)}w.sort((a,b)=>a-b);med[f]=w[w.length>>1]}
   for(let f=0;f<nF;f++){if(isNaN(med[f]))continue;const w=[];for(let j=-12;j<=12;j++){const v=med[f+j];if(v===v&&v!==undefined)w.push(v)}w.sort((a,b)=>a-b);const c=w[w.length>>1],df=med[f]-c;if(Math.abs(df-12)<1.2){med[f]-=12;raw[f]-=12}else if(Math.abs(df+12)<1.2){med[f]+=12;raw[f]+=12}}
-  return {raw,contour:med,hopSec:hop/dsr,t0:(W/2)/dsr};
+  return {raw,clar,contour:med,hopSec:hop/dsr,t0:(W/2)/dsr};
 }
 // Pass 3 — instant. filter: 0 off, 1 normal, 2 strong
 function buildNotes(an,filter){
@@ -705,8 +720,12 @@ function buildNotes(an,filter){
     else{if(run&&run.m!=null)runs.push(run);run=q!=null?{m:q,f0:f,f1:f}:null}
   }
   if(run)runs.push(run);
-  const minF=Math.ceil(.11/hopSec),gapF=Math.ceil(.06/hopSec);
+  // every separate sung sound (before repeated same-pitch notes are merged): used to place lyrics syllable by syllable
+  const uMin=Math.ceil(.06/hopSec),units=runs.filter(r=>r.f1-r.f0+1>=uMin).map(r=>({start:t0+r.f0*hopSec-hopSec/2,dur:(r.f1-r.f0+1)*hopSec}));
+  const minF=Math.ceil((an.stem?.08:.11)/hopSec) /* clean vocal files keep quick runs and ornaments */,gapF=Math.ceil(.06/hopSec);
   const kept=[];
+  // name each note by its typical pitch, not its first moment (singers often slide into notes)
+  for(const r of runs){const vs=[];for(let f=r.f0;f<=r.f1;f++){const x=med[f];if(x===x)vs.push(x-tuning)}if(vs.length){vs.sort((a,b)=>a-b);r.m=Math.round(vs[vs.length>>1])}}
   for(const r of runs){if(r.f1-r.f0+1<minF)continue;const last=kept[kept.length-1];if(last&&last.m===r.m&&r.f0-last.f1<=gapF)last.f1=r.f1;else kept.push({...r})}
   // 3) how "voice-like" is each note? Voices always waver (vibrato, natural jitter);
   //    pianos, synths and guitars hold a near-perfectly steady pitch.
@@ -717,7 +736,8 @@ function buildNotes(an,filter){
     const s=[...vals].sort((p,q)=>p-q),mdn=s[s.length>>1];
     let ss=0;for(const v of vals)ss+=(v-mdn)*(v-mdn);r.wob=Math.sqrt(ss/vals.length)*100;
   }
-  let notes=kept.map(r=>({midi:r.m,start:t0+r.f0*hopSec-hopSec/2,dur:(r.f1-r.f0+1)*hopSec,wob:r.wob}));
+  const cl=an.clar;for(const r of kept){let a=0,c=0;for(let f=r.f0;f<=r.f1;f++){a+=cl?cl[f]:1;c++}r.clar=c?a/c:1}
+  let notes=kept.map(r=>({midi:r.m,start:t0+r.f0*hopSec-hopSec/2,dur:(r.f1-r.f0+1)*hopSec,wob:r.wob,clar:r.clar}));
   // 4) judge each note together with its neighbours (±2.5 s): sung passages waver, instrumental ones don't
   if(filter>0&&notes.length){
     for(const n of notes)n.v=n.wob==null?null:clamp((n.wob-2.5)/4,0,1);
@@ -743,7 +763,7 @@ function buildNotes(an,filter){
   let lo=48,hi=72;
   if(notes.length){const ms=notes.map(n=>n.midi).sort((a,b)=>a-b);lo=ms[Math.floor(ms.length*.08)];hi=ms[Math.min(ms.length-1,Math.ceil(ms.length*.92)-1)];
     if(hi-lo>22){const md=ms[ms.length>>1];lo=Math.max(lo,md-11);hi=Math.min(hi,md+11)}}
-  return {notes,tuning,lo,hi};
+  return {notes,tuning,lo,hi,units};
 }
 // Apply the background filter + the user's manual edits to a prepared track
 function applyNotes(meta){
@@ -818,7 +838,7 @@ async function prepareTrack(meta){
     setProc(3,0);await yieldUI();
     const an={...pp,mono,stem:!!voc};
     trackData[meta.id]={orig:mix,kar,an,dur:mix.duration};
-    if(meta.filter==null)meta.filter=rec&&rec.filter!=null?rec.filter:1;
+    if(meta.filter==null)meta.filter=rec&&rec.filter!=null?rec.filter:(voc?0:1); // vocal files have no instruments to filter out
     if(!meta.edits)meta.edits=(rec&&rec.edits)||{del:[],oct:{}};
     Object.assign(meta,{dur:mix.duration,mono,stem:!!voc});
     applyNotes(meta);
@@ -828,22 +848,79 @@ async function prepareTrack(meta){
 }
 const isAudioFile=f=>/^audio\//.test(f.type)||/\.(mp3|wav|m4a|aac|ogg|oga|flac|webm|opus)$/i.test(f.name);
 const stemKind=name=>/(no.?vocal|instrumental|karaoke|accompan|backing|minus.?one|\binst\b|music)/i.test(name)?'inst':/(vocal|acapella|a.?cappella|voice|vox)/i.test(name)?'voc':'mix';
-async function uploadFiles(files){
-  files=[...(files||[])].filter(isAudioFile);
-  if(!files.length){toast('Please choose an audio file (MP3, WAV, M4A…)');return}
+/* ---------- Add-a-song window: separate slots for vocals, instrumental, full song ---------- */
+function cleanTitle(n){
+  let t=n.replace(/\.[^.]+$/,'');
+  t=t.replace(/^ytdown\.com[_\s-]*/i,'').replace(/^youtube[_\s-]*media[_\s-]*/i,'').replace(/^[\w-]{11}_/,'');   // download-site prefixes + video id
+  t=t.replace(/[_\s-]+\d{2,3}[_\s-]+\d+k[_\s-].*$/i,'');                                                        // "_009_128k_..." quality tags
+  t=t.replace(/[_\s(\[-]+(vocals?|instrumental|acapella|a[_\s-]?cappella|no[_\s-]?vocals?|karaoke)\b.*$/i,'');      // stem labels
+  t=t.replace(/[_\s(\[-]+(official[_\s-]*)?(lyrics?|lyric[_\s-]*video|music[_\s-]*video|audio|video)[)\]]*$/i,'');
+  if(!/\s/.test(t))t=t.replace(/[-_]+/g,' ');else t=t.replace(/_+/g,' ');
+  return t.replace(/\s{2,}/g,' ').trim().slice(0,60);
+}
+const UP={voc:null,inst:null,mix:null};
+const SLOTS=[
+  ['voc','Vocals only','The singing on its own, e.g. from Ultimate Vocal Remover. Gives the most accurate notes.','Best accuracy'],
+  ['inst','Instrumental','The music without vocals, so you have a backing track to sing along to.','Optional'],
+  ['mix','Full song','Only if you don’t have separate files. The vocals are separated automatically, less accurately.','']];
+function openUploadModal(pre){
+  UP.voc=UP.inst=UP.mix=null;let title='';
+  if(UP.refresh&&$('#modal .slots')&&modalOpen()){for(const f of [...(pre||[])].filter(isAudioFile)){const k=stemKind(f.name);UP[k]=f}UP.refresh();return}
+  for(const f of [...(pre||[])].filter(isAudioFile)){const k=stemKind(f.name);if(!UP[k])UP[k]=f;else if(!UP.mix)UP.mix=f}
+  $('#modal').innerHTML=`<div class="eyebrow">New track</div><h2>Add a song</h2>
+    <p class="muted" style="margin-top:6px;line-height:1.5">Add the vocals, the music, or both. You can add the missing part to the song later.</p>
+    <div class="slots">${SLOTS.map(([k,t,d,b])=>`<div class="slot" data-k="${k}"><div class="slot-ic">${k==='voc'?'🎤':k==='inst'?'🎹':'🎵'}</div>
+      <div class="slot-tx"><b>${t}${b?` <span class="slot-badge${k==='voc'?' best':''}">${b}</span>`:''}</b><span class="slot-d">${d}</span><span class="slot-f" id="sf-${k}"></span></div>
+      <button class="btn ghost sm" data-pick="${k}">Choose…</button><button class="slot-x" data-clear="${k}" title="Remove" hidden>✕</button>
+      <input type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" hidden data-in="${k}"></div>`).join('')}</div>
+    <div class="field"><label>Song title</label><input id="upTitle" maxlength="60" placeholder="My song"></div>
+    <div class="parse-msg" id="upMsg"></div>
+    <div class="modal-actions"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="upGo" disabled>Add song</button></div>`;
+  openModal();
+  const refresh=()=>{
+    for(const [k] of SLOTS){const f=UP[k],el=$(`#sf-${k}`),sl=$(`.slot[data-k="${k}"]`);el.textContent=f?'✓ '+f.name:'';sl.classList.toggle('has',!!f);
+      sl.querySelector('[data-pick]').textContent=f?'Change…':'Choose…';sl.querySelector('[data-clear]').hidden=!f}
+    const first=UP.voc||UP.mix||UP.inst;if(first&&!$('#upTitle').dataset.touched)$('#upTitle').value=cleanTitle(first.name);
+    const ok=!!(UP.voc||UP.mix),m=$('#upMsg');$('#upGo').disabled=!ok;
+    m.className='parse-msg '+(ok?'ok':'');
+    m.textContent=!UP.voc&&!UP.mix&&UP.inst?'Add the vocals or the full song too, so there’s a melody to follow.'
+      :UP.voc&&!UP.inst&&!UP.mix?'✓ Notes come from your vocals. Add the instrumental now or later for music behind you.'
+      :UP.voc&&UP.inst?'✓ Best setup: accurate notes and a clean karaoke track.'
+      :UP.mix&&!UP.voc?'✓ Vocals will be separated from the full song automatically.':'';
+  };
+  $$('.slot').forEach(sl=>{
+    const k=sl.dataset.k,inp=sl.querySelector('[data-in]');
+    sl.querySelector('[data-pick]').onclick=()=>inp.click();
+    inp.onchange=()=>{const f=inp.files[0];inp.value='';if(f&&isAudioFile(f)){UP[k]=f;refresh()}else if(f)toast('Please choose an audio file (MP3, WAV, M4A…)')};
+    sl.querySelector('[data-clear]').onclick=()=>{UP[k]=null;refresh()};
+    sl.addEventListener('dragover',e=>{e.preventDefault();e.stopPropagation();sl.classList.add('over')});
+    sl.addEventListener('dragleave',()=>sl.classList.remove('over'));
+    sl.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();sl.classList.remove('over');dragN=0;$('#drop').classList.remove('show');const f=e.dataTransfer.files[0];if(f&&isAudioFile(f)){UP[k]=f;refresh()}});
+  });
+  UP.refresh=refresh;
+  $('#upTitle').oninput=e=>{e.target.dataset.touched='1'};
+  $('#upGo').onclick=()=>{const t=$('#upTitle').value.trim();closeModal();createTrack({voc:UP.voc,inst:UP.inst,mix:UP.mix,title:t})};
+  refresh();
+}
+async function createTrack({voc,inst,mix,title}){
   if(P.running)stopRun();
-  let mix=null,voc=null,inst=null;
-  if(files.length===1)mix=files[0];
-  else{let extra=0;for(const f of files){const k=stemKind(f.name);if(k==='voc'&&!voc)voc=f;else if(k==='inst'&&!inst)inst=f;else if(!mix)mix=f;else extra++}
-    if(extra)toast('Only one song at a time. Extra files were skipped. To add stems, name them with “vocals” or “instrumental”.')}
-  const base=(mix||voc||inst).name.replace(/\.[^.]+$/,'').replace(/[_]+/g,' ').replace(/[\s(\[-]*(vocals?|instrumental|acapella|no.?vocals?)[\s)\]]*$/i,'').slice(0,60);
-  const meta={id:'t-'+Date.now(),kind:'audio',group:'Your tracks',title:base||'My track',_blob:mix,_voc:voc,_inst:inst};
+  const meta={id:'t-'+Date.now(),kind:'audio',group:'Your tracks',title:title||cleanTitle((voc||mix||inst).name)||'My track',_blob:mix,_voc:voc,_inst:inst};
   const ok=await prepareTrack(meta);if(!ok)return;
-  delete meta._blob;delete meta._voc;delete meta._inst;tracks.unshift(meta);
-  try{await idb.put({...meta,blob:mix,vocBlob:voc,instBlob:inst,created:Date.now()})}catch(e){toast(/blocked/.test(e&&e.message)?'Track ready, but it can’t be saved for next time while the app is open in another tab or on the Home Screen. Close the other copy.':'Track ready (it couldn’t be saved for next time in this browser)')}
-  await loadSong(meta.id);
-  if(!meta.count)toast('No clear vocal melody was found. Try setting Background filter to Off, or add a vocal stem.');
-  else toast(`Found ${meta.count} notes${voc?' from your vocal stem':''}. Press Space when you’re ready to sing!`);
+  delete meta._blob;delete meta._voc;delete meta._inst;meta.hasInst=!!inst||!!mix;meta.hasMix=!!mix;tracks.unshift(meta);
+  try{await idb.put({...meta,blob:mix,vocBlob:voc,instBlob:inst,created:Date.now()})}catch(e){toast(/blocked/.test(e&&e.message)?'Song ready, but it can’t be saved for next time while the app is open in another tab or on the Home Screen. Close the other copy.':'Song ready (it couldn’t be saved for next time in this browser)')}
+  showView('practice');await loadSong(meta.id);
+  if(!meta.count)toast('No clear vocal melody was found. Try setting Background filter to Off.');
+  else toast(`Found ${meta.count} notes${voc?' in your vocals':''}. Press Space when you’re ready to sing!`);
+}
+// kept for drag-and-drop compatibility: open the window with the files pre-sorted
+async function uploadFiles(files){openUploadModal(files)}
+async function addInstrumental(file){
+  if(!file||!isAudioFile(file)||!isAudio())return;
+  const meta=P.song;if(P.running)stopRun();
+  meta._inst=file;const ok=await prepareTrack(meta);delete meta._inst;if(!ok)return;
+  meta.hasInst=true;
+  try{const rec=await idb.get(meta.id);await idb.put({...rec,instBlob:file,hasInst:true,count:meta.count})}catch(e){}
+  build();renderLib();renderHead();toast('Instrumental added. Turn “Original vocals” down for karaoke.');
 }
 async function addStem(file){
   if(!file||!isAudioFile(file)||!isAudio())return;
@@ -875,7 +952,15 @@ const saveS=()=>store.set('settings',S);
 let actx=null,analyser=null,tbuf=null,ybuf=null,micStream=null,micOn=false,level=0,master=null;
 let pitch=null;const mh=[];let nullRun=0;
 let inLat=.02,ANALYSIS_LAG=.05,noiseFloor=.002;
-window.__pitchRef=()=>pitch;const rmsHist=[];let rmsTick=0;
+window.__pitchRef=()=>pitch;
+// The centre of the singer's vibrato: the average pitch over the last ~0.2 s (about one vibrato wobble).
+// Listeners hear this centre as "the note", so judging uses it; the drawn pitch line still shows every wobble.
+const VIB_WIN=.2,VIB_LAG=.09;
+function vibCentre(){
+  if(!pitch)return null;const t=performance.now()/1000;let a=0,c=0;
+  for(let i=live.length-1;i>=0&&live[i].t>t-VIB_WIN;i--){const m=live[i].m;if(Math.abs(m-pitch.midi)<1.6){a+=m;c++}}
+  return c>=3?a/c:pitch.midi;
+}const rmsHist=[];let rmsTick=0;
 const outLat=()=>actx?((actx.outputLatency||0)+(actx.baseLatency||0)):0;
 const live=[];// {t,m} wall-clock seconds
 // iPad/iPhone Safari only lets audio start inside a tap, and resume() called at any other moment can wait forever.
@@ -992,6 +1077,13 @@ function build(){
     P.notes=d.an.notes.map(n=>({midi:n.midi+tu,label:n.midi,key:n.key,start:n.start,dur:n.dur,hits:0,total:0,voiced:0,near:0,sum:0,sq:0}));
     P.lo=d.an.lo-5;P.hi=d.an.hi+5;if(P.hi-P.lo<14){const c=(P.lo+P.hi)/2;P.lo=Math.floor(c-7);P.hi=Math.ceil(c+7)}
     P.center=(d.an.lo+d.an.hi)/2+tu;P.ref=P.notes.length?P.notes[0].midi:60;
+    // quick ornaments (runs, grace notes) are drawn but not scored, like a karaoke chart's main notes;
+    // if a song is mostly quick notes (very fast singing), everything is scored
+    const main=P.notes.filter(n=>n.dur>=.25).length;
+    if(main>=10)for(const n of P.notes)n.orn=n.dur<.25;   // only very sparse guides score everything
+    // mostly very short notes = rapped or spoken lyrics, which have no held note to aim for
+    const shortShare=P.notes.length?P.notes.filter(n=>n.dur<.2).length/P.notes.length:0;
+    P.speechy=P.notes.length>=40&&shortShare>.6;
     P.pps=150;P.trace=[];P.active=null;attachLyrics();
     return;
   }
@@ -1028,13 +1120,14 @@ function renderHead(){
   if(au){
     const d=trackData[s.id];
     const tc=Math.round((d.an.tuning||0)*100);
-    $('#songMeta').textContent=`Your track · ${fmtTime(d.dur)} · ${d.an.notes.length} notes${d.an.notes.length?` · ${mname(d.an.lo)}–${mname(d.an.hi)}`:''}${d.an.stem?' · from vocal stem':''}${Math.abs(tc)>=5?` · tuned ${Math.abs(tc)}¢ ${tc<0?'flat':'sharp'}`:''}`;
+    $('#songMeta').textContent=`Your track · ${fmtTime(d.dur)} · ${d.an.notes.length} notes${d.an.notes.length?` · ${mname(d.an.lo)}–${mname(d.an.hi)}`:''}${d.an.stem?' · from your vocals':''}${Math.abs(tc)>=5?` · tuned ${Math.abs(tc)}¢ ${tc<0?'flat':'sharp'}`:''}`;
     $('#songTitle').textContent=s.title;
-    $('#songDesc').textContent=(d.an.stem?'Notes come from your isolated vocal file. ':'Notes were detected from the lead vocal automatically. ')+'Click a note to fix it, or click the timeline to start anywhere.';
+    $('#songDesc').textContent=(d.an.stem?'Notes come from your isolated vocal file. ':'Notes were detected from the lead vocal automatically. ')+(P.notes.some(n=>n.orn)?'Thin dashed bars are quick notes (ornaments or rapped words): shown but not scored. ':'')+'Click a note to fix it, or click the timeline to start anywhere.';
     $('#vox').disabled=d.an.mono&&!d.an.stem;
     const msgs=[];
     if(d.an.mono&&!d.an.stem)msgs.push('This file is mono, so the original vocals can’t be removed and the note guide is less reliable.');
     if(!d.an.notes.length)msgs.push('No clear vocal melody was found. Try Background filter “Off”, or add a vocal stem.');
+    else if(P.speechy)msgs.push(`This song is mostly rapped or spoken, so there are few held notes to aim for. Only its ${P.notes.filter(n=>!n.orn).length} held, sung notes are scored; the rest are shown as thin dashed bars.`);
     else if(!S.anyOct)msgs.push('Tip: turn on “Any octave”. Your voice may sit an octave away from the singer’s.');
     if(S.range&&d.an.notes.length){const up=d.an.hi-S.range.hi,dn=S.range.lo-d.an.lo;
       if(up>0||dn>0)msgs.push(`This song reaches ${up>0?mname(d.an.hi)+`, ${up} note${up>1?'s':''} above`:''}${up>0&&dn>0?' and ':''}${dn>0?mname(d.an.lo)+`, ${dn} note${dn>1?'s':''} below`:''} your range.${S.anyOct?' “Any octave” is on, so you can sing those parts an octave '+(up>0?'lower':'higher')+'.':' Turn on “Any octave” to sing those parts in a different octave.'}`);}
@@ -1042,11 +1135,12 @@ function renderHead(){
     bn.hidden=false;
     bn.innerHTML=(msgs.length?esc(msgs.join(' '))+'<br>':'')+
       (d.an.stem
-        ?`<span>Using your vocal stem for the note guide.</span> <button class="btn ghost sm" id="rmStem" style="margin-left:6px">Use the song only</button>`
-        :`<span>Seeing notes when nobody sings, or wrong pitches? For the most accurate guide, add the song’s <b>isolated vocals</b> (made with the free app Ultimate Vocal Remover).</span> <button class="btn ghost sm" id="addStemBtn" style="margin-left:6px">Add vocal stem</button>`)+
+        ?`<span>${s.hasInst===false?'Vocals only, so there’s no music behind you yet.':'Notes come from your vocals file.'}</span> <button class="btn ghost sm" id="instBtn" style="margin-left:6px">${s.hasInst===false?'Add instrumental':'Change instrumental'}</button>${s.hasMix!==false&&s.hasInst!==false?' <button class="btn ghost sm" id="rmStem" style="margin-left:6px">Use the full song only</button>':''}`
+        :`<span>Seeing notes when nobody sings, or wrong pitches? For the most accurate guide, add the song’s <b>isolated vocals</b> (made with the free app Ultimate Vocal Remover).</span> <button class="btn ghost sm" id="addStemBtn" style="margin-left:6px">Add vocals file</button>`)+
       ` <button class="btn ghost sm" id="lyrBtn" style="margin-left:6px">${s.lyrics&&s.lyrics.length?'Edit lyrics':'Add lyrics'}</button>`+
       (nEd?` <button class="btn ghost sm" id="resetEd" style="margin-left:6px">Undo my ${nEd} note edit${nEd>1?'s':''}</button>`:'');
     const a1=$('#addStemBtn');if(a1)a1.onclick=()=>$('#stemIn').click();
+    const a0=$('#instBtn');if(a0)a0.onclick=()=>$('#instIn').click();
     const a2=$('#rmStem');if(a2)a2.onclick=removeStem;
     $('#lyrBtn').onclick=openLyricsEditor;
     const a3=$('#resetEd');if(a3)a3.onclick=()=>{s.edits={del:[],oct:{}};refreshNotes(s)};
@@ -1188,14 +1282,22 @@ function tickPractice(){
     P.active=act;
     const va=P.notes.find(n=>n.midi!=null&&vt>=n.start&&vt<n.start+n.dur)||null;P.vAct=va;
     if(P.mode==='sing'&&vt>=P.runFrom-P.unit*.5){
-      let st=null,um=null;
+      let st=null,um=null,ui=null,uc=null;
       const ref=va?va.midi:P.ref;
-      if(pitch)um=fold(pitch.midi,ref);
-      if(va&&um!=null){const d=Math.abs(um-va.midi)*100;st=d<=TOL[S.tol]?'hit':d<=TOL[S.tol]*2.2?'near':'off'}
+      if(pitch){um=fold(pitch.midi,ref);if(va){ui=fold(pitch.midi,va.midi);uc=fold(vibCentre(),va.midi)}}
+      // on pitch if EITHER the exact pitch or the vibrato centre (average of the last ~0.2 s) is in range:
+      // straight singing is judged exactly as before, and vibrato swinging around a centred note isn't punished
+      const dev=va&&ui!=null?Math.min(Math.abs(ui-va.midi),Math.abs(uc-va.midi))*100:null;
+      // timing slack: within 0.12 s of a note change, matching the neighbouring note also counts
+      // (nobody hits every change to the hundredth of a second)
+      const SLACK=.12,devTo=n=>{if(!n||!pitch)return 1e9;const a=fold(pitch.midi,n.midi),b=fold(vibCentre(),n.midi);return Math.min(Math.abs(a-n.midi),Math.abs(b-n.midi))*100};
+      let slackDev=dev;
+      if(va&&pitch)for(const dt of [-SLACK,SLACK]){const k=P.notes.find(n=>n.midi!=null&&vt+dt>=n.start&&vt+dt<n.start+n.dur);if(k&&k!==va)slackDev=Math.min(slackDev,devTo(k))}
+      if(dev!=null)st=slackDev<=TOL[S.tol]?'hit':dev<=TOL[S.tol]*2.2?'near':'off';
       const act=va;
-      if(act&&vt>=P.runFrom&&vt>=act.start+Math.min(.12,act.dur*.2)&&vt<=act.start+act.dur-.04){
+      if(act&&!act.orn&&vt>=P.runFrom&&vt>=act.start+Math.min(.12,act.dur*.2)&&vt<=act.start+act.dur-.04){
         act.total++;
-        if(um!=null){const d=(um-act.midi)*100;act.voiced++;if(Math.abs(d)<=100){act.near++;act.sum+=d;act.sq+=d*d}if(Math.abs(d)<=TOL[S.tol])act.hits++}
+        if(ui!=null){const d=(Math.abs(uc-act.midi)<Math.abs(ui-act.midi)?uc-act.midi:ui-act.midi)*100;act.voiced++;if(Math.abs(d)<=100){act.near++;act.sum+=d;act.sq+=d*d}if(slackDev<=TOL[S.tol])act.hits++}
       }
       if(um!=null)P.trace.push({t:vt,m:um,s:st});
     }
@@ -1276,7 +1378,7 @@ $('#loopPill button').onclick=e=>{e.stopPropagation();P.loop=null;P.passes=[];up
 function discardRecording(){}
 function passScore(){
   const ns=P.notes.filter(n=>n.midi!=null&&n.total>0);if(!ns.length)return null;
-  return Math.round(ns.reduce((a,n)=>a+n.hits/n.total,0)/ns.length*100);
+  const w=ns.reduce((a,n)=>a+n.dur,0)||1;return Math.round(ns.reduce((a,n)=>a+n.hits/n.total*n.dur,0)/w*100);
 }
 function loopRestart(){
   const mode=P.mode;
@@ -1394,6 +1496,8 @@ function drawRoll(){
     }else if(scored){
       const s=n.hits/n.total,col=s>=.75?COL.hit:s>=.4?COL.near:COL.off;
       g.fillStyle=col+'33';rr(g,x0,y,w,nh,8);g.fill();g.strokeStyle=col+'aa';g.lineWidth=1.5;g.stroke();
+    }else if(n.orn){ // quick ornament: shown, not scored
+      g.fillStyle='rgba(255,255,255,.055)';rr(g,x0,y+nh*.25,w,nh*.5,5);g.fill();g.setLineDash([3,3]);g.strokeStyle='rgba(255,255,255,.22)';g.lineWidth=1;g.stroke();g.setLineDash([]);
     }else{
       g.fillStyle='rgba(255,255,255,.075)';rr(g,x0,y,w,nh,8);g.fill();g.strokeStyle='rgba(255,255,255,.2)';g.lineWidth=1;g.stroke();
     }
@@ -1432,9 +1536,9 @@ let lastHud='';
 function updateHud(){
   const ta=P.running?(P.mode==='sing'?P.vAct:P.active):null,tgt=ta?ta.midi:null;
   let c=null;const pitch=P.replay?null:window.__pitchRef();
-  if(pitch){c=tgt!=null?(fold(pitch.midi,tgt)-tgt)*100:(pitch.midi-Math.round(pitch.midi))*100}
+  if(pitch){const ce=vibCentre();c=tgt!=null?(fold(ce,tgt)-tgt)*100:(ce-Math.round(ce))*100}
   const done=P.notes.filter(n=>n.midi!=null&&n.total>0&&n!==P.vAct);
-  const sc=done.length?Math.round(done.reduce((a,n)=>a+n.hits/n.total,0)/done.length*100)+'%':'—';
+  const dw=done.reduce((a,n)=>a+n.dur,0)||1,sc=done.length?Math.round(done.reduce((a,n)=>a+n.hits/n.total*n.dur,0)/dw*100)+'%':'—';
   const tStr=ta?mname(ta.label!=null?ta.label:ta.midi):P.running?'·':'—';
   const yStr=pitch?mname(pitch.midi-(P.tune||0)):'—';
   const cStr=c==null?'—':Math.abs(c)>=100?(c>0?'+':'−')+(Math.abs(c)/100).toFixed(1)+' st':(c>0?'+':c<0?'−':'')+Math.abs(Math.round(c))+'¢';
@@ -1450,8 +1554,8 @@ function updateHud(){
 
 /* ================= RESULTS ================= */
 function computeResults(notes){
-  const per=notes.map(n=>({midi:n.label!=null?n.label:Math.round(n.midi),score:n.total?n.hits/n.total:0,voiced:n.total?n.voiced/n.total:0,avg:n.near?n.sum/n.near:null}));
-  const score=Math.round(per.reduce((a,p)=>a+p.score,0)/per.length*100);
+  const per=notes.map(n=>({dur:n.dur,midi:n.label!=null?n.label:Math.round(n.midi),score:n.total?n.hits/n.total:0,voiced:n.total?n.voiced/n.total:0,avg:n.near?n.sum/n.near:null}));
+  const wsum=per.reduce((a,p)=>a+p.dur,0)||1,score=Math.round(per.reduce((a,p)=>a+p.score*p.dur,0)/wsum*100); // weighted by note length
   const good=per.filter(p=>p.score>=.6).length;
   const V=notes.reduce((a,n)=>a+n.voiced,0),T=notes.reduce((a,n)=>a+n.total,0);
   const NR=notes.reduce((a,n)=>a+n.near,0);
@@ -1588,11 +1692,12 @@ function tickTuner(){
   const tol=TOL[S.tol];
   if(pitch){
     const m=pitch.midi;
-    if(T.target!=null){const mm=S.anyOct?fold(m,T.target):m;c=(mm-T.target)*100;
+    const mc=vibCentre();
+    if(T.target!=null){const mm=S.anyOct?fold(mc,T.target):mc;c=(mm-T.target)*100;
       if(Math.abs(c)<=tol){status='Locked in — hold it!';cls='good'}
       else if(Math.abs(c)>=100){const st=Math.round(Math.abs(c)/100);status=(c<0?'Go higher ↑':'Go lower ↓')+` (${st} semitone${st>1?'s':''})`;cls='bad'}
       else{status=c<0?'A little flat — lift slightly ↑':'A little sharp — ease down ↓';cls='warn'}
-    }else{c=(m-Math.round(m))*100;
+    }else{c=(mc-Math.round(mc))*100;
       if(Math.abs(c)<=10){status='In tune';cls='good'}else{status=c<0?'Slightly flat':'Slightly sharp';cls='warn'}}
     const r=Math.round(m),n=NAMES[pc(r)];
     $('#tnNote').innerHTML=`<span class="tn-name">${n[0]}</span>${n[1]?`<span class="tn-acc">${n[1]}</span>`:''}<span class="tn-oct">${oc(r)}</span>`;
@@ -1729,7 +1834,8 @@ function stableNote(){ // a note held steadily for ~1 s, or null
   const now=performance.now()/1000,pts=live.filter(p=>p.t>now-1);
   if(pts.length<10||pts[0].t>now-.85)return null;
   for(let i=1;i<pts.length;i++)if(pts[i].t-pts[i-1].t>.15)return null; // must be continuous
-  const ms=pts.map(p=>p.m).sort((a,b)=>a-b),lo=ms[Math.floor(ms.length*.1)],hi=ms[Math.floor(ms.length*.9)];
+  const avg=pts.map(p=>{let a=0,c=0;for(const q of pts)if(Math.abs(q.t-p.t)<=VIB_WIN/2){a+=q.m;c++}return a/c});
+  const ms=avg.sort((a,b)=>a-b),lo=ms[Math.floor(ms.length*.1)],hi=ms[Math.floor(ms.length*.9)];
   return hi-lo<.7?Math.round(ms[ms.length>>1]):null;
 }
 async function startRangeTest(){
@@ -1765,7 +1871,7 @@ function tickRange(){
   const n=$('#rfNote');if(!n)return;
   if(pitch){n.textContent=mname(pitch.midi);$('#rfSub').textContent=pitch.freq.toFixed(0)+' Hz'}else{n.textContent='—';$('#rfSub').textContent='waiting for your voice…'}
   const now=performance.now()/1000,pts=live.filter(p=>p.t>now-1);
-  let stab=0;if(pts.length>5){const ms=pts.map(p=>p.m).sort((a,b)=>a-b);const spread=ms[Math.floor(ms.length*.9)]-ms[Math.floor(ms.length*.1)];let gap=0;for(let i=1;i<pts.length;i++)gap=Math.max(gap,pts[i].t-pts[i-1].t);stab=(gap>.15?0:clamp((now-pts[0].t)/.9,0,1))*clamp(1-(spread-.3)/.8,0,1)}
+  let stab=0;if(pts.length>5){const ms=pts.map(p=>{let a=0,c=0;for(const q of pts)if(Math.abs(q.t-p.t)<=VIB_WIN/2){a+=q.m;c++}return a/c}).sort((a,b)=>a-b);const spread=ms[Math.floor(ms.length*.9)]-ms[Math.floor(ms.length*.1)];let gap=0;for(let i=1;i<pts.length;i++)gap=Math.max(gap,pts[i].t-pts[i-1].t);stab=(gap>.15?0:clamp((now-pts[0].t)/.9,0,1))*clamp(1-(spread-.3)/.8,0,1)}
   $('#rfStab').style.width=stab*100+'%';
   const sn=stableNote();
   if(sn!=null){if(RF.step===0)RF.low=RF.low==null?sn:Math.min(RF.low,sn);else RF.high=RF.high==null?sn:Math.max(RF.high,sn)}
@@ -1900,23 +2006,84 @@ function parseLRC(text){
   return {timed,lines:timed?out.filter(x=>x.t!=null&&x.text).sort((a,b)=>a.t-b.t):out.map(x=>x.text)};
 }
 function fmtLRC(t){const m=Math.floor(t/60),s=(t%60).toFixed(2).padStart(5,'0');return `[${String(m).padStart(2,'0')}:${s}]`}
+/* ---------- automatic lyric placement ----------
+   Fits lyric lines onto the sung notes: each line should cover about as many notes as it has syllables,
+   lines tend to start after a breath (a gap in the singing), and a line rarely contains a long pause. */
+function wordSyl(w){
+  w=w.toLowerCase().replace(/[^a-zà-ÿ']/g,'').replace(/'/g,'');if(!w)return 0;if(w.length<=3)return 1;
+  let s=(w.match(/[aeiouyà-ÿ]+/g)||[]).length;
+  if(/[^aeiouy]e$/.test(w)&&!/[^aeiouy]le$/.test(w))s--;                       // silent final e ("time"), but "lit-tle" is sung
+  if(/[^aeiouy](es|ed)$/.test(w)&&!/(t|d)ed$|(s|z|x|ch|sh|c|g)es$/.test(w))s--; // "saved", "times" (but "wanted", "kisses")
+  return Math.max(1,s);
+}
+const lineSyl=l=>l.split(/[\s\-–—]+/).reduce((a,w)=>a+wordSyl(w),0);
+function readLyricLines(text){
+  const out=[];let brk=false;
+  for(const raw of String(text).split(/\r?\n/)){
+    const l=raw.replace(/\[\d{1,2}:\d{1,2}(?:[.:]\d{1,3})?\]/g,'').trim();
+    if(!l||/^\[[^\]]*\]$/.test(l)||/^(verse|chorus|bridge|intro|outro|pre-?chorus|hook)\b[\s\d:]*$/i.test(l)){brk=true;continue} // blank lines and [Chorus] labels mark sections
+    out.push({text:l,syl:Math.max(1,lineSyl(l)),brk});brk=false;
+  }
+  return out;
+}
+function autoPlaceLyrics(lines,notes){
+  notes=[...notes].sort((a,b)=>a.start-b.start);
+  const N=notes.length,L=lines.length;if(!N||!L)return null;
+  const st=notes.map(n=>n.start),en=notes.map(n=>n.start+n.dur),gap=st.map((t,j)=>j?t-en[j-1]:.6); // the song's first note is not a 'breath'
+  const pen=new Float64Array(N);for(let j=1;j<N;j++)pen[j]=pen[j-1]+6*Math.max(0,gap[j]-.5); // long pauses inside a line are unlikely
+  const lineCost=(i,j,k)=>{ // line i covers notes j..k-1
+    const n=k-j,s=lines[i].syl,mis=n>=s?.5*(n-s)*(n-s)/(s+2):2*(s-n)*(s-n)/(s+1);
+    const inner=pen[k-1]-pen[j],dur=en[k-1]-st[j],tooLong=Math.max(0,dur-(s*.9+2));
+    return mis+inner+tooLong;
+  };
+  const startBonus=(i,j)=>1.2*Math.min(gap[j],1)+(lines[i].brk&&gap[j]>1.5?1:0);
+  const D=[],B=[];for(let i=0;i<L;i++){D.push(new Float64Array(N).fill(Infinity));B.push(new Int32Array(N).fill(-1))}
+  for(let j=0;j<N;j++)D[0][j]=.25*j-startBonus(0,j);   // notes before the first line (intro ad-libs) cost a little each
+  for(let i=1;i<L;i++){const W=lines[i-1].syl*3+12;
+    for(let k=i;k<N;k++){let best=Infinity,bj=-1;
+      for(let j=Math.max(i-1,k-W);j<k;j++){const c=D[i-1][j];if(c===Infinity)continue;const v=c+lineCost(i-1,j,k);if(v<best){best=v;bj=j}}
+      if(bj>=0){D[i][k]=best-startBonus(i,k);B[i][k]=bj}}}
+  // the last line ends wherever fits best; leftover notes (outro ad-libs) cost a little each
+  let best=Infinity,bj=-1;const sL=lines[L-1].syl;
+  for(let j=L-1;j<N;j++){if(D[L-1][j]===Infinity)continue;
+    for(let e=j+1;e<=Math.min(N,j+sL*3+12);e++){const v=D[L-1][j]+lineCost(L-1,j,e)+.25*(N-e);if(v<best){best=v;bj=j}}}
+  if(bj<0)return null;
+  const starts=new Array(L);starts[L-1]=bj;for(let i=L-1;i>0;i--)starts[i-1]=B[i][starts[i]];
+  return lines.map((l,i)=>({t:Math.max(0,st[starts[i]]-.08),text:l.text}));
+}
+
 function openLyricsEditor(){
-  const meta=P.song,has=meta.lyrics&&meta.lyrics.length;
+  const meta=P.song,has=meta.lyrics&&meta.lyrics.length,d=trackData[meta.id],canAuto=!!(d&&d.an.notes&&d.an.notes.length>=8);
   $('#modal').innerHTML=`<div class="eyebrow">${esc(meta.title)}</div><h2>Lyrics</h2>
-    <p class="help">Paste the lyrics with one line per line. If you have timed lyrics (an <code>.lrc</code> file, lines like <code>[01:23.45] text</code>), they line up automatically. For plain lyrics, the song will play and you press <kbd>Enter</kbd> as each line starts. That takes one listen.</p>
+    <p class="help">Paste the lyrics (one sung line per line) or choose a <code>.txt</code> / <code>.lrc</code> file. Timed lyrics (lines like <code>[01:23.45] text</code>) line up straight away. For plain lyrics, choose <b>Place automatically</b> and the app fits each line onto the singing, or <b>Tap to sync</b> to tap along as the song plays.</p>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap"><button class="btn ghost sm" id="lyFile">📄 Choose file…</button><input type="file" id="lyFileIn" accept=".lrc,.txt,text/plain" hidden>
+      <span class="muted" style="font-size:12px" id="lyShiftWrap" hidden>Move all lines: <button class="btn ghost sm" data-sh="-0.5">−0.5 s</button> <button class="btn ghost sm" data-sh="-0.1">−0.1 s</button> <button class="btn ghost sm" data-sh="0.1">+0.1 s</button> <button class="btn ghost sm" data-sh="0.5">+0.5 s</button></span></div>
     <div class="field"><label>Lyrics</label><textarea id="lyIn" style="min-height:220px;font-family:Manrope,sans-serif">${esc(has?meta.lyrics.map(l=>fmtLRC(l.t)+' '+l.text).join('\n'):'')}</textarea></div>
     <div class="parse-msg" id="lyMsg"></div>
-    <div class="modal-actions">${has?'<button class="btn ghost" id="lyDel">Remove lyrics</button>':''}<button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="lySave">Save</button></div>`;
+    <div class="modal-actions">${has?'<button class="btn ghost" id="lyDel">Remove</button>':''}<button class="btn ghost" data-close>Cancel</button>
+      <button class="btn ghost" id="lyTap" hidden>Tap to sync</button><button class="btn primary" id="lyAuto" hidden>Place automatically</button><button class="btn primary" id="lySave" hidden>Save</button></div>`;
   openModal();
-  const chk=()=>{const r=parseLRC($('#lyIn').value),m=$('#lyMsg');if(!r.lines.length){m.textContent='';return r}m.className='parse-msg ok';m.textContent=r.timed?`✓ ${r.lines.length} timed lines, ready to save`:`${r.lines.length} lines. Saving starts the song so you can tap Enter on each line.`;return r};
+  const chk=()=>{const r=parseLRC($('#lyIn').value),m=$('#lyMsg');
+    $('#lySave').hidden=!r.timed;$('#lyAuto').hidden=r.timed||!r.lines.length;$('#lyTap').hidden=r.timed||!r.lines.length;$('#lyShiftWrap').hidden=!r.timed;
+    if(!r.lines.length){m.textContent='';return r}
+    m.className='parse-msg ok';m.textContent=r.timed?`✓ ${r.lines.length} timed lines, ready to save`:`${r.lines.length} lines.`+(canAuto?' Place them automatically, or tap along as the song plays.':' Tap along as the song plays to place them.');
+    if(!canAuto)$('#lyAuto').hidden=true;return r};
   $('#lyIn').oninput=chk;chk();
-  const d=$('#lyDel');if(d)d.onclick=()=>{meta.lyrics=null;saveTrackMeta(meta);closeModal();attachLyrics();lyrKey='';renderHead()};
-  $('#lySave').onclick=()=>{
-    const r=chk();if(!r.lines.length){$('#lyMsg').className='parse-msg err';$('#lyMsg').textContent='Paste some lyrics first';return}
-    if(r.timed){meta.lyrics=r.lines;saveTrackMeta(meta);closeModal();attachLyrics();lyrKey='';renderHead();toast(`Lyrics saved (${r.lines.length} lines)`);return}
-    closeModal();P.offset=0;P.loop=null;updateLoopPill();
-    startRun('listen').then(()=>{P.syncLyr={lines:r.lines,i:0,out:[]};lyrKey=''});
+  $('#lyFile').onclick=()=>$('#lyFileIn').click();
+  $('#lyFileIn').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;if(f.size>500000){toast('That file is too large for lyrics');return}
+    try{$('#lyIn').value=await f.text();chk()}catch(err){toast('Couldn’t read that file')}};
+  $$('#lyShiftWrap [data-sh]').forEach(b=>b.onclick=()=>{const dt=+b.dataset.sh;
+    $('#lyIn').value=$('#lyIn').value.replace(/\[(\d{1,2}):(\d{1,2}(?:[.:]\d{1,3})?)\]/g,(m,mm,ss)=>fmtLRC(Math.max(0,+mm*60+parseFloat(ss.replace(':','.'))+dt)));chk()});
+  const del=$('#lyDel');if(del)del.onclick=()=>{meta.lyrics=null;saveTrackMeta(meta);closeModal();attachLyrics();lyrKey='';renderHead()};
+  const saveLines=(lines,msg)=>{meta.lyrics=lines;saveTrackMeta(meta);closeModal();attachLyrics();lyrKey='';renderHead();toast(msg)};
+  $('#lySave').onclick=()=>{const r=chk();if(r.timed&&r.lines.length)saveLines(r.lines,`Lyrics saved (${r.lines.length} lines)`)};
+  $('#lyAuto').onclick=()=>{
+    const lines=readLyricLines($('#lyIn').value),placed=autoPlaceLyrics(lines,d.an.units&&d.an.units.length?d.an.units:d.an.notes);
+    if(!placed){$('#lyMsg').className='parse-msg err';$('#lyMsg').textContent='Couldn’t place these lyrics automatically. Try Tap to sync.';return}
+    saveLines(placed,'Lyrics placed automatically. Play the song to check; Edit lyrics lets you fine-tune.');
   };
+  $('#lyTap').onclick=()=>{const r=chk();if(!r.lines.length)return;closeModal();P.offset=0;P.loop=null;updateLoopPill();
+    startRun('listen').then(()=>{P.syncLyr={lines:r.lines,i:0,out:[]};lyrKey=''})};
 }
 function tapLyric(){
   const sl=P.syncLyr;if(!sl||!P.running)return;
@@ -2009,7 +2176,7 @@ tickDrill=function(){
   if(!D.on||D.phase!=='listen')return;
   const now=performance.now(),tol=Math.max(TOL[S.tol],30);
   if(pitch){
-    const um=S.anyOct?fold(pitch.midi,D.target):pitch.midi,d=(um-D.target)*100;D.lastSung.push(pitch.midi);if(D.lastSung.length>40)D.lastSung.shift();
+    const ce=vibCentre(),um=S.anyOct?fold(ce,D.target):ce,d=(um-D.target)*100;D.lastSung.push(pitch.midi);if(D.lastSung.length>40)D.lastSung.shift();
     if(Math.abs(d)<=tol){if(!D.hold)D.hold={since:now,vals:[]};D.hold.vals.push(d)}else D.hold=null;
   }else D.hold=null;
   const held=D.hold?(now-D.hold.since)/1000:0;$('#dHold').style.width=Math.min(1,held/.8)*100+'%';
@@ -2197,7 +2364,8 @@ const shiftKey=d=>{if(isAudio())return;S.transpose=clamp(S.transpose+d,-12,12);c
 $('#sync').oninput=e=>{S.sync=+e.target.value;$('#syncLbl').textContent=S.sync+' ms';saveS()};
 $('#vox').oninput=e=>{S.vox=e.target.value/100;$('#voxLbl').textContent=e.target.value+'%';saveS();applyMix()};
 $('#music').oninput=e=>{S.music=e.target.value/100;$('#musicLbl').textContent=e.target.value+'%';saveS();applyMix()};
-$('#uploadBtn').onclick=()=>$('#fileIn').click();
+$('#uploadBtn').onclick=()=>openUploadModal();
+$('#instIn').onchange=e=>{const f=e.target.files[0];e.target.value='';addInstrumental(f)};
 $('#fileIn').onchange=e=>{const f=[...e.target.files];e.target.value='';showView('practice');uploadFiles(f)};
 $('#stemIn').onchange=e=>{const f=e.target.files[0];e.target.value='';addStem(f)};
 $$('#filtSeg button').forEach(b=>b.onclick=()=>{if(!isAudio())return;P.song.filter=+b.dataset.v;refreshNotes(P.song)});
