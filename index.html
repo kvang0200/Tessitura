@@ -565,8 +565,8 @@ const fmtTime=s=>{s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+String
 /* ---------- uploaded tracks: storage (IndexedDB) ---------- */
 const idb={
   db:null,
-  open(){if(this.db)return Promise.resolve(this.db);return new Promise((res,rej)=>{try{const r=indexedDB.open('tessitura',2);r.onupgradeneeded=()=>{const db=r.result;for(const n of ['tracks','takes'])if(!db.objectStoreNames.contains(n))db.createObjectStore(n,{keyPath:'id'})};r.onsuccess=()=>{this.db=r.result;res(r.result)};r.onerror=()=>rej(r.error)}catch(e){rej(e)}})},
-  async tx(mode,fn,store='tracks'){const db=await this.open();return new Promise((res,rej)=>{const t=db.transaction(store,mode);const st=t.objectStore(store);const r=fn(st);t.oncomplete=()=>res(r&&r.result);t.onerror=()=>rej(t.error)})},
+  open(){if(this.db)return Promise.resolve(this.db);if(this.broken)return Promise.reject(new Error('storage unavailable'));return new Promise((res,rej)=>{const fail=e=>{if(!this.db){this.broken=true;rej(e||new Error('storage unavailable'))}};setTimeout(()=>fail(new Error('storage timed out')),3500);try{const r=indexedDB.open('tessitura',2);r.onblocked=()=>fail(new Error('storage blocked by another open copy of the app'));r.onupgradeneeded=()=>{const db=r.result;for(const n of ['tracks','takes'])if(!db.objectStoreNames.contains(n))db.createObjectStore(n,{keyPath:'id'})};r.onsuccess=()=>{this.db=r.result;this.db.onversionchange=()=>{try{this.db.close()}catch(e){}this.db=null};res(r.result)};r.onerror=()=>fail(r.error)}catch(e){fail(e)}})},
+  async tx(mode,fn,store='tracks'){const db=await this.open();return new Promise((res,rej)=>{setTimeout(()=>rej(new Error('storage timed out')),5000);const t=db.transaction(store,mode);const st=t.objectStore(store);const r=fn(st);t.oncomplete=()=>res(r&&r.result);t.onerror=()=>rej(t.error)})},
   all(){return this.tx('readonly',s=>s.getAll())},
   get(id){return this.tx('readonly',s=>s.get(id))},
   put(o){return this.tx('readwrite',s=>s.put(o))},
@@ -773,7 +773,7 @@ function setProc(stage,frac){
 }
 async function decodeBlob(blob,label){
   const ab=await blob.arrayBuffer();
-  try{return await actx.decodeAudioData(ab)}catch(e){throw new Error(`Your browser couldn’t decode the ${label} file. Try an MP3 or WAV.`)}
+  try{return await decodeAudio(ab)}catch(e){throw new Error(e&&e.message==='timeout'?`Reading the ${label} file took too long. Try a shorter or smaller file (MP3 works best).`:`Your browser couldn’t decode the ${label} file. Try an MP3, M4A or WAV.`)}
 }
 function fitLen(buf,len){ // pad/trim a buffer to len samples, stereo
   const out=actx.createBuffer(2,len,buf.sampleRate);
@@ -840,7 +840,7 @@ async function uploadFiles(files){
   const meta={id:'t-'+Date.now(),kind:'audio',group:'Your tracks',title:base||'My track',_blob:mix,_voc:voc,_inst:inst};
   const ok=await prepareTrack(meta);if(!ok)return;
   delete meta._blob;delete meta._voc;delete meta._inst;tracks.unshift(meta);
-  try{await idb.put({...meta,blob:mix,vocBlob:voc,instBlob:inst,created:Date.now()})}catch(e){toast('Track ready (it couldn’t be saved for next time in this browser)')}
+  try{await idb.put({...meta,blob:mix,vocBlob:voc,instBlob:inst,created:Date.now()})}catch(e){toast(/blocked/.test(e&&e.message)?'Track ready, but it can’t be saved for next time while the app is open in another tab or on the Home Screen. Close the other copy.':'Track ready (it couldn’t be saved for next time in this browser)')}
   await loadSong(meta.id);
   if(!meta.count)toast('No clear vocal melody was found. Try setting Background filter to Off, or add a vocal stem.');
   else toast(`Found ${meta.count} notes${voc?' from your vocal stem':''}. Press Space when you’re ready to sing!`);
@@ -878,10 +878,25 @@ let inLat=.02,ANALYSIS_LAG=.05,noiseFloor=.002;
 window.__pitchRef=()=>pitch;const rmsHist=[];let rmsTick=0;
 const outLat=()=>actx?((actx.outputLatency||0)+(actx.baseLatency||0)):0;
 const live=[];// {t,m} wall-clock seconds
+// iPad/iPhone Safari only lets audio start inside a tap, and resume() called at any other moment can wait forever.
+// So: switch audio on during the user's taps, and never make other work (like reading a song) wait for it.
+function unlockAudio(){
+  try{if(!actx)actx=new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state!=='running'){const r=actx.resume();if(r&&r.catch)r.catch(()=>{})}}catch(e){}
+}
+['pointerdown','touchend','click','keydown'].forEach(ev=>addEventListener(ev,unlockAudio,{capture:true,passive:true}));
 async function ensureCtx(){
   if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)();
-  if(actx.state==='suspended') await actx.resume();
+  if(actx.state!=='running'){try{await Promise.race([actx.resume(),new Promise(r=>setTimeout(r,400))])}catch(e){}}
   return actx;
+}
+// decodeAudioData: callback + promise forms (older Safari only fires callbacks), with a time limit
+function decodeAudio(ab){
+  return new Promise((res,rej)=>{
+    let done=false;const ok=b=>{if(!done){done=true;res(b)}},bad=e=>{if(!done){done=true;rej(e||new Error('decode failed'))}};
+    setTimeout(()=>bad(new Error('timeout')),90000);
+    try{const pr=actx.decodeAudioData(ab,ok,bad);if(pr&&pr.then)pr.then(ok,bad)}catch(e){bad(e)}
+  });
 }
 async function enableMic(){
   await ensureCtx();
@@ -1798,7 +1813,7 @@ async function playTake(take){
   closeModal();if(P.running)stopRun();stopReplay();
   if(!P.song||P.song.id!==take.songId){await loadSong(take.songId);if(!P.song||P.song.id!==take.songId)return}
   await ensureCtx();
-  let buf;try{buf=await actx.decodeAudioData(await take.blob.arrayBuffer())}catch(e){toast('This browser can’t play that recording back.');return}
+  let buf;try{buf=await decodeAudio(await take.blob.arrayBuffer())}catch(e){toast('This browser can’t play that recording back.');return}
   const t0=actx.currentTime+.3,nodes=[];
   const src=actx.createBufferSource();src.buffer=buf;const vg=actx.createGain();vg.gain.value=1.15;src.connect(vg);vg.connect(out());src.start(t0);nodes.push(src);
   if(S.replayBacking!==false){
