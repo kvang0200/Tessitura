@@ -1,5 +1,7 @@
 // Tessitura · Shared helpers, saved settings, the song library, browser storage (IndexedDB) and the FFT.
 'use strict';
+// true on phones and tablets without a mouse: swaps “press Space / click / hover” wording for “tap”
+const touchUI=()=>matchMedia('(hover: none)').matches;
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const NAMES=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 const pc=m=>((Math.round(m)%12)+12)%12;

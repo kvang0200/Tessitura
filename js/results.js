@@ -44,9 +44,9 @@ function showResults(r){
       <div><span>Steadiness</span><b>${steady}</b></div>
       <div><span>Best streak</span><b>${r.streak} notes</b></div>
     </div>
-    <div class="chips">${r.per.map(p=>`<span class="chip ${p.score>=.75?'g':p.score>=.4?'w':'b'}" title="${Math.round(p.score*100)}% on pitch${p.avg!=null?`, avg ${p.avg>0?'+':''}${Math.round(p.avg)}¢`:''}">${mname(p.midi)}</span>`).join('')}</div>
+    <div class="chips">${r.per.map(p=>`<span class="chip ${p.score>=.75?'g':p.score>=.4?'w':'b'}" data-tip="${Math.round(p.score*100)}% on pitch${p.avg!=null?`, avg ${p.avg>0?'+':''}${Math.round(p.avg)}¢`:''}">${mname(p.midi)}</span>`).join('')}</div>
     <div class="tips">${tips.slice(0,3).map(t=>`<div>${t}</div>`).join('')}</div>
-    <div class="modal-actions"><button class="btn ghost" data-close>Close</button><button class="btn ghost" id="listenBack" disabled>▶ Listen back</button><button class="btn primary" id="againBtn">Sing again <kbd style="margin-left:4px;background:rgba(0,0,0,.15);border-color:transparent;color:#1d0f08">Space</kbd></button></div>`;
+    <div class="modal-actions"><button class="btn ghost" data-close>Close</button><button class="btn ghost" id="listenBack" disabled>▶ Listen back</button><button class="btn primary" id="againBtn">Sing again <kbd class="kbd-hint" style="margin-left:4px;background:rgba(0,0,0,.15);border-color:transparent;color:#1d0f08">Space</kbd></button></div>`;
   openModal();
   requestAnimationFrame(()=>requestAnimationFrame(()=>{const a=$('#ringArc');if(a)a.style.strokeDashoffset=C*(1-r.score/100)}));
   $('#againBtn').onclick=()=>startRun('sing');
@@ -96,12 +96,12 @@ function openHelp(){
     <div class="help-list">
       <div><span class="n">1</span><span><b>Turn on your mic</b> and start in the <b>Train</b> tab: find your vocal range so every song moves into the right key for you, then follow today’s 10-minute routine.</span></div>
       <div><span class="n">2</span><span><b>Practice:</b> pick a song, press <b>Listen</b>, then <b>Start singing</b>. Keep your glowing line inside the bars: teal is on pitch, amber is close, rose is off. Lyrics scroll along with the notes.</span></div>
-      <div><span class="n">3</span><span><b>Loop the hard parts:</b> drag across the timeline under the lanes to repeat a section, or click it to start anywhere. Slow the <b>Tempo</b> for built-in songs.</span></div>
+      <div><span class="n">3</span><span><b>Loop the hard parts:</b> drag across the timeline under the lanes to repeat a section, or ${touchUI()?'tap':'click'} it to start anywhere. Slow the <b>Tempo</b> for built-in songs.</span></div>
       <div><span class="n">4</span><span><b>Listen back:</b> every sung take is recorded. Open <b>Takes</b> or press <b>Listen back</b> after a run to hear yourself with your pitch line replayed.</span></div>
       <div><span class="n">5</span><span><b>Upload your own songs</b> (add the isolated vocal file for best accuracy), turn the singer down for karaoke, and add lyrics.</span></div>
       <div><span class="n">6</span><span><b>Ear training</b> (Train tab) builds your inner pitch, and <b>Progress → Weak spots</b> shows the notes and leaps you miss most, with a drill made just for them.</span></div>
     </div>
-    <p class="help" style="margin-top:18px">Shortcuts: <kbd>Space</kbd> sing / stop · <kbd>L</kbd> listen · <kbd>↑</kbd><kbd>↓</kbd> change key · <kbd>+</kbd><kbd>−</kbd> zoom lanes · <kbd>0</kbd> fit · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> scroll lanes · <kbd>Esc</kbd> stop<br>On the lanes: scroll to move up/down, Ctrl/⌘ + scroll (or pinch) to zoom.</p>
+    <p class="help" style="margin-top:18px">${touchUI()?'On the lanes: pinch to zoom in or out, and drag up or down to move when zoomed in. Tap a note to fix it. Tap any <b>?</b> for an explanation.':`Shortcuts: <kbd>Space</kbd> sing / stop · <kbd>L</kbd> listen · <kbd>↑</kbd><kbd>↓</kbd> change key · <kbd>+</kbd><kbd>−</kbd> zoom lanes · <kbd>0</kbd> fit · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> scroll lanes · <kbd>Esc</kbd> stop<br>On the lanes: scroll to move up/down, Ctrl/⌘ + scroll (or pinch) to zoom.`}</p>
     <div class="modal-actions"><button class="btn primary" data-close>Got it</button></div>`;
   openModal();
 }

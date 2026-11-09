@@ -18,7 +18,7 @@ function sylHtml(list,cls){let h='';list.forEach((x,i)=>{const t=x.text,join=/-$
 function updateLyrics(){
   const box=$('#lyrBox');
   if(P.syncLyr){const sl=P.syncLyr,ln=sl.lines[sl.i]||'';const key='sync'+sl.i;if(key!==lyrKey){lyrKey=key;box.hidden=false;box.classList.add('sync');
-      $('#lyr1').innerHTML=`<span class="cur">${esc(ln)}</span>`;$('#lyr2').innerHTML=`Press <kbd>Enter</kbd> (or click here) the moment this line starts · ${sl.i+1} of ${sl.lines.length}`}return}
+      $('#lyr1').innerHTML=`<span class="cur">${esc(ln)}</span>`;$('#lyr2').innerHTML=`${touchUI()?'Tap here':'Press <kbd>Enter</kbd> (or click here)'} the moment this line starts · ${sl.i+1} of ${sl.lines.length}`}return}
   box.classList.remove('sync');
   if(!P.lyr||S.lyrics===false){if(!box.hidden){box.hidden=true;lyrKey=''}return}
   const now=P.now;let key,l1='',l2='';

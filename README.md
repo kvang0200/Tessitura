@@ -3,7 +3,7 @@
 A vocal pitch trainer that runs entirely in the browser. Sing into your mic and it shows, note by note, whether you're on pitch, for built-in exercises or for songs you upload.
 
 **Open it:** https://kvang0200.github.io/Tessitura/ (on iPad: Share → Add to Home Screen).
-On a computer you can also open `index.html` straight from the folder. Nothing is uploaded anywhere: songs, takes and progress stay in the browser on your device.
+Works on phones, tablets (portrait or landscape) and computers. On a computer you can also open `index.html` straight from the folder. Nothing is uploaded anywhere: songs, takes and progress stay in the browser on your device.
 
 ## What it does
 
@@ -37,6 +37,7 @@ Plain HTML, CSS and JavaScript with no build step and no dependencies. The scrip
 | `js/ear.js` | Ear-training drills |
 | `js/weak.js` | Weak-spots report and drill builder |
 | `js/routine.js` | Daily routine and streak |
+| `js/touch.js` | Phones and tablets: song drawer, settings sheet, tap-to-explain tips, pinch and drag on the lanes |
 | `js/main.js` | Start-up, tab switching, keyboard shortcuts, drag-and-drop |
 
 Script order matters: `core.js` comes first and `main.js` last.

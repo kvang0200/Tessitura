@@ -29,7 +29,7 @@ function renderRoutine(){
   const c=$('#routineCard');if(!c)return;
   const steps=routineSteps(),done=steps.filter(s=>s.done).length,st=streak(),days=practiceDays();
   let strip='';for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);const on=days.has(dayKey(d));
-    strip+=`<i title="${d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}${on?': practised':''}" style="width:14px;height:14px;border-radius:4px;background:${on?'linear-gradient(135deg,var(--accent),var(--accent2))':'var(--panel3)'};${i===0?'outline:1.5px solid var(--muted);outline-offset:2px':''}"></i>`}
+    strip+=`<i data-tip="${d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}${on?': practised':''}" style="width:14px;height:14px;border-radius:4px;background:${on?'linear-gradient(135deg,var(--accent),var(--accent2))':'var(--panel3)'};${i===0?'outline:1.5px solid var(--muted);outline-offset:2px':''}"></i>`}
   const next=steps.find(s=>!s.done);
   c.innerHTML=`<div class="card-title"><span>Today’s practice · about 10 minutes</span><span style="display:flex;gap:4px;align-items:center">${strip}</span></div>
     <div style="display:flex;align-items:center;gap:22px;flex-wrap:wrap;margin-bottom:16px">
@@ -44,7 +44,7 @@ function renderRoutine(){
   const go=s=>{
     if(s.drill){routineMode=true;startDrill(s.drill,5);return}
     if(s.make&&!makeWeakDrill())return;
-    routineMode=true;showView('practice');loadSong(s.id).then(()=>toast(`${s.t}: press Space when you’re ready`));
+    routineMode=true;showView('practice');loadSong(s.id).then(()=>toast(`${s.t}: ${touchUI()?'tap Start singing':'press Space'} when you’re ready`));
   };
   if(next)$('#rtNext').onclick=()=>go(next);
   $$('#routineCard .rt-step').forEach(b=>b.onclick=()=>go(steps[+b.dataset.i]));

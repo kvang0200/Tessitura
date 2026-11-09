@@ -193,7 +193,7 @@ function updateHint(){
   if(P.running){h.classList.add('hide');return}
   h.classList.remove('hide');
   h.innerHTML=micOn
-    ?`<span><b>Ready.</b> Press <kbd>Space</kbd> to sing along, or <kbd>L</kbd> to hear it first.</span>`
+    ?(touchUI()?`<span><b>Ready.</b> Tap <b>Start singing</b> to sing along, or <b>Listen</b> to hear it first.</span>`:`<span><b>Ready.</b> Press <kbd>Space</kbd> to sing along, or <kbd>L</kbd> to hear it first.</span>`)
     :`<span>Turn on your mic to see your voice on the lanes</span><button class="btn primary sm" id="hintMic">Enable mic</button>`;
   const b=$('#hintMic');if(b)b.onclick=enableMic;
 }
@@ -296,7 +296,7 @@ $('#timeline').addEventListener('pointerup',e=>{
   const mode=P.running?P.mode:null;
   if(d.moved&&draft&&draft.b-draft.a>=1){
     if(P.running)stopRun();build();P.loop={a:Math.max(0,draft.a),b:Math.min(P.total,draft.b)};P.offset=P.loop.a;P.passes=[];
-    updateLoopPill();toast(`Looping ${fmtTime(P.loop.a)}–${fmtTime(P.loop.b)}. Press Space to start.`);
+    updateLoopPill();toast(`Looping ${fmtTime(P.loop.a)}–${fmtTime(P.loop.b)}. ${touchUI()?'Tap Start singing':'Press Space'} to start.`);
     if(mode)startRun(mode);return;
   }
   if(d.moved)return;

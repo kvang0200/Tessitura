@@ -131,7 +131,7 @@ async function createTrack({voc,inst,mix,title}){
   try{await idb.put({...meta,blob:mix,vocBlob:voc,instBlob:inst,created:Date.now()})}catch(e){toast(/blocked/.test(e&&e.message)?'Song ready, but it can’t be saved for next time while the app is open in another tab or on the Home Screen. Close the other copy.':'Song ready (it couldn’t be saved for next time in this browser)')}
   showView('practice');await loadSong(meta.id);
   if(!meta.count)toast('No clear vocal melody was found. Try setting Background filter to Off.');
-  else toast(`Found ${meta.count} notes${voc?' in your vocals':''}. Press Space when you’re ready to sing!`);
+  else toast(`Found ${meta.count} notes${voc?' in your vocals':''}. ${touchUI()?'Tap Start singing':'Press Space'} when you’re ready to sing!`);
 }
 async function addInstrumental(file){
   if(!file||!isAudioFile(file)||!isAudio())return;
