@@ -22,6 +22,7 @@ Plain HTML, CSS and JavaScript with no build step and no dependencies. The scrip
 | --- | --- |
 | `index.html` | Page markup; loads the stylesheet and scripts |
 | `css/app.css` | All styling |
+| `css/fonts.css`, `fonts/` | Self-hosted fonts (no requests to Google or any other server) |
 | `icons/` | Browser and Home Screen icons |
 | `js/core.js` | Shared helpers, settings, built-in song library, storage (IndexedDB), FFT |
 | `js/analysis.js` | Song analysis: vocal isolation, pitch tracking, note building |
@@ -41,3 +42,11 @@ Plain HTML, CSS and JavaScript with no build step and no dependencies. The scrip
 | `js/main.js` | Start-up, tab switching, keyboard shortcuts, drag-and-drop |
 
 Script order matters: `core.js` comes first and `main.js` last.
+
+## Security
+
+- **Content Security Policy** (in `index.html`): only the app's own scripts, styles and fonts can load; no inline scripts, no third-party hosts, no plugins, no forms, no `<base>` changes. Keep it that way: don't add inline `<script>` blocks or `on…=` attributes, and bundle any new library instead of linking a CDN.
+- **No outside requests:** fonts are self-hosted and the referrer is never sent, so nothing about you or your songs leaves the device.
+- **Saved data is validated** when read back (`store` and `cleanTrackMeta` in `core.js`, `takesFor` in `takes.js`). On GitHub Pages every project under the same account shares one origin, and so one localStorage/IndexedDB, so stored values are treated as untrusted: wrong types are dropped, numbers are clamped and text is escaped before it reaches the page.
+- **User text is escaped** (`esc()` or `textContent`) everywhere it is shown: song titles, file names, lyrics, melody names.
+- **Uploads** are decoded locally and capped at 300 MB per audio file, 500 KB per lyrics file.

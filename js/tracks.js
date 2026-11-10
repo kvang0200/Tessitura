@@ -67,7 +67,9 @@ async function prepareTrack(meta){
     return true;
   }catch(e){modalLocked=false;closeModal();toast(e.message||'Something went wrong preparing that track');return false}
 }
-const isAudioFile=f=>/^audio\//.test(f.type)||/\.(mp3|wav|m4a|aac|ogg|oga|flac|webm|opus)$/i.test(f.name);
+const MAX_AUDIO_BYTES=300*1024*1024; // decoding expands audio ~10×, so anything bigger would exhaust the tab's memory
+const isAudioFile=f=>{if(!f||!(/^audio\//.test(f.type)||/\.(mp3|wav|m4a|aac|ogg|oga|flac|webm|opus)$/i.test(f.name)))return false;
+  if(f.size>MAX_AUDIO_BYTES){toast('That file is over 300 MB. Try an MP3 or M4A version of the song.');return false}return true};
 const stemKind=name=>/(no.?vocal|instrumental|karaoke|accompan|backing|minus.?one|\binst\b|music)/i.test(name)?'inst':/(vocal|acapella|a.?cappella|voice|vox)/i.test(name)?'voc':'mix';
 /* ---------- Add-a-song window: separate slots for vocals, instrumental, full song ---------- */
 function cleanTitle(n){
@@ -112,7 +114,7 @@ function openUploadModal(pre){
   $$('.slot').forEach(sl=>{
     const k=sl.dataset.k,inp=sl.querySelector('[data-in]');
     sl.querySelector('[data-pick]').onclick=()=>inp.click();
-    inp.onchange=()=>{const f=inp.files[0];inp.value='';if(f&&isAudioFile(f)){UP[k]=f;refresh()}else if(f)toast('Please choose an audio file (MP3, WAV, M4A…)')};
+    inp.onchange=()=>{const f=inp.files[0];inp.value='';if(f&&isAudioFile(f)){UP[k]=f;refresh()}else if(f&&f.size<=MAX_AUDIO_BYTES)toast('Please choose an audio file (MP3, WAV, M4A…)')};
     sl.querySelector('[data-clear]').onclick=()=>{UP[k]=null;refresh()};
     sl.addEventListener('dragover',e=>{e.preventDefault();e.stopPropagation();sl.classList.add('over')});
     sl.addEventListener('dragleave',()=>sl.classList.remove('over'));

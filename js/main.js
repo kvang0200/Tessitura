@@ -72,7 +72,7 @@ function loop(){
 buildKbd();updateMicUI();tzLbl();
 P.song=BUILTIN[0];
 (async()=>{
-  try{const recs=await idb.all();tracks=(recs||[]).sort((a,b)=>b.created-a.created).map(r=>{const {blob,vocBlob,instBlob,...m}=r;return m})}catch(e){}
+  try{const recs=await idb.all();tracks=(recs||[]).map(r=>{if(!r||typeof r!=='object')return null;const {blob,vocBlob,instBlob,...m}=r;return cleanTrackMeta(m)}).filter(Boolean).sort((a,b)=>b.created-a.created)}catch(e){}
   const saved=allSongs().find(x=>x.id===S.songId);
   await loadSong(saved&&!isAudio(saved)?saved.id:BUILTIN[0].id);
 })();

@@ -12,8 +12,48 @@ const f2m=f=>69+12*Math.log2(f/440), m2f=m=>440*Math.pow(2,(m-69)/12);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const isBlack=m=>[1,3,6,8,10].includes(pc(m));
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* ---------- saved data (localStorage) ----------
+   Everything read back is treated as untrusted: on GitHub Pages every project of the same account shares one
+   origin (and so one localStorage), and the data can also be edited by hand. Values are checked against the
+   shape the app expects, so a bad or hostile entry is dropped instead of reaching the page or crashing it. */
+const isObj=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
+const vStr=(v,max=200)=>typeof v==='string'?v.slice(0,max):'';
+const vNum=(v,d=0)=>typeof v==='number'&&Number.isFinite(v)?v:d;
+const vId=v=>{const s=vStr(v,80);return /^[\w.-]+$/.test(s)?s:''};
+const SAFE_KEY=k=>k!=='__proto__'&&k!=='constructor'&&k!=='prototype';
+const CLEAN={
+  history:a=>a.filter(isObj).map(x=>({id:vId(x.id),title:vStr(x.title),score:clamp(Math.round(vNum(x.score)),0,100),date:vNum(x.date),
+    tol:vStr(x.tol,10),tr:clamp(Math.round(vNum(x.tr)),-24,24),dur:Math.max(0,vNum(x.dur))})).filter(x=>x.id),
+  ear:a=>a.filter(isObj).map(x=>({type:vStr(x.type,20),date:vNum(x.date),correct:x.correct===true,total:Math.max(0,Math.round(vNum(x.total))),
+    cents:typeof x.cents==='number'&&Number.isFinite(x.cents)?x.cents:null,level:x.level==='hard'?'hard':'easy'})),
+  custom:a=>a.filter(isObj).map(x=>({id:vId(x.id),title:vStr(x.title,60)||'Untitled melody',bpm:clamp(vNum(x.bpm,90),40,220),
+    bpb:[2,3,4,6].includes(x.bpb)?x.bpb:4,level:0,desc:'Your custom melody.',seq:vStr(x.seq,20000),lyr:vStr(x.lyr,20000)||undefined}))
+    .filter(x=>x.id&&x.seq),
+  drill:d=>{if(!isObj(d)||d.id!=='drill-weak')return null;const seq=vStr(d.seq,20000);if(!seq)return null;
+    return {id:'drill-weak',kind:'midi',group:'Your drills',title:'Weak-spot drill',bpm:clamp(vNum(d.bpm,80),40,220),bpb:4,level:0,noAuto:true,
+      desc:vStr(d.desc,400),seq,created:vNum(d.created)}},
+  stats:o=>{const out={note:{},int:{},ear:{}};for(const kind of ['note','int','ear']){const src=isObj(o[kind])?o[kind]:{};
+    for(const [k,e] of Object.entries(src)){if(!SAFE_KEY(k)||!/^-?\d{1,3}$/.test(k)||!isObj(e))continue;
+      const n=vNum(e.n),s=vNum(e.s),c=vNum(e.c),cn=vNum(e.cn);if(n>0)out[kind][k]={n,s:clamp(s,0,n),c,cn:Math.max(0,cn)}}}return out},
+  settings:o=>{const out={};for(const [k,v] of Object.entries(o)){if(!SAFE_KEY(k)||!/^\w{1,30}$/.test(k))continue;
+    if(typeof v==='boolean'||(typeof v==='number'&&Number.isFinite(v))||v===null)out[k]=v;
+    else if(typeof v==='string')out[k]=v.slice(0,80);
+    else if(k==='range'&&isObj(v)&&[v.lo,v.hi,v.date].every(n=>typeof n==='number'&&Number.isFinite(n)))out[k]={lo:clamp(v.lo,24,108),hi:clamp(v.hi,24,108),date:v.date}}
+    return out},
+};
+// metadata of an uploaded track as read back from IndexedDB (blobs are handled separately)
+function cleanTrackMeta(m){
+  if(!isObj(m)||!vId(m.id))return null;
+  const edits=isObj(m.edits)?m.edits:{};
+  const oct={};if(isObj(edits.oct))for(const [k,v] of Object.entries(edits.oct))if(SAFE_KEY(k)&&typeof v==='number'&&Number.isFinite(v))oct[k]=clamp(Math.round(v/12)*12,-36,36);
+  return {...m,id:vId(m.id),kind:'audio',group:'Your tracks',title:vStr(m.title,120)||'My track',created:vNum(m.created),
+    lyrics:Array.isArray(m.lyrics)?m.lyrics.filter(isObj).map(l=>({...l,t:vNum(l.t),text:vStr(l.text,500)})):null,
+    edits:{del:Array.isArray(edits.del)?edits.del.filter(x=>typeof x==='string'||typeof x==='number'):[],oct}};
+}
+const sameShape=(v,d)=>d===null||d===undefined?true:Array.isArray(d)?Array.isArray(v):isObj(d)?isObj(v):typeof v===typeof d&&(typeof v!=='number'||Number.isFinite(v));
 const store={
-  get(k,d){try{const v=localStorage.getItem('tessitura.'+k);return v?JSON.parse(v):d}catch(e){return d}},
+  get(k,d){try{const raw=localStorage.getItem('tessitura.'+k);if(!raw)return d;let v=JSON.parse(raw);if(!sameShape(v,d))return d;
+    if(CLEAN[k])v=CLEAN[k](v);return v==null?d:v}catch(e){return d}},
   set(k,v){try{localStorage.setItem('tessitura.'+k,JSON.stringify(v))}catch(e){}}
 };
 let toastT;
@@ -115,6 +155,12 @@ function makeFFT(N){
 const yieldUI=()=>new Promise(r=>setTimeout(r,0));
 
 /* ================= SETTINGS ================= */
-const S=Object.assign({transpose:0,tempo:100,tol:'std',anyOct:true,guide:false,songId:'w-five',vox:.25,music:.9,sync:0,range:null,autoKey:null},store.get('settings',{}));
+const S_DEFAULTS={transpose:0,tempo:100,tol:'std',anyOct:true,guide:false,songId:'w-five',vox:.25,music:.9,sync:0,range:null,autoKey:null};
+const S=Object.assign({},S_DEFAULTS,store.get('settings',{}));
+// a saved value of the wrong type falls back to the default, and numbers stay inside the ranges the controls allow
+for(const [k,d] of Object.entries(S_DEFAULTS))if(d!==null&&typeof S[k]!==typeof d)S[k]=d;
+S.transpose=clamp(Math.round(S.transpose),-12,12);S.tempo=clamp(S.tempo,50,150);S.vox=clamp(S.vox,0,1);S.music=clamp(S.music,0,1);S.sync=clamp(S.sync,0,400);
+if(!['easy','std','strict'].includes(S.tol))S.tol='std';
+if(S.range!==null&&!isObj(S.range))S.range=null;
 const TOL={easy:50,std:30,strict:15};
 const saveS=()=>store.set('settings',S);
