@@ -1,7 +1,7 @@
 // Tessitura · The Tuner tab: gauge, target keyboard, hold-steady drill and pitch trail.
 'use strict';
 /* ================= TUNER ================= */
-const T={span:store.get('trailSpan',12),target:null,base:store.get('kbdBase',48),holdStart:null,best:0,needle:0,celebrated:false};
+const T={span:clamp(Math.round(store.get('trailSpan',12)),6,36),target:null,base:clamp(Math.round(store.get('kbdBase',48)/12)*12,24,72),holdStart:null,best:0,needle:0,celebrated:false};
 (function buildGauge(){
   const cx=150,cy=160,svg=$('#gauge');let h='';
   const pt=(a,r)=>[cx+r*Math.sin(a*Math.PI/180),cy-r*Math.cos(a*Math.PI/180)];

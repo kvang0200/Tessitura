@@ -33,7 +33,7 @@ async function saveTake(recP,r){
   lastTake=take;updateTakesBtn();return take;
 }
 let lastTake=null;
-async function takesFor(songId){try{const all=await idb.tx('readonly',s=>s.getAll(),'takes');return (all||[]).filter(t=>t.songId===songId).sort((a,b)=>b.date-a.date)}catch(e){return lastTake&&lastTake.songId===songId?[lastTake]:[]}}
+async function takesFor(songId){try{const all=await idb.tx('readonly',s=>s.getAll(),'takes');return (all||[]).filter(t=>t&&t.songId===songId&&vId(t.id)&&t.blob instanceof Blob&&Array.isArray(t.notes)).map(t=>({...t,score:clamp(Math.round(vNum(t.score)),0,100),date:vNum(t.date),title:vStr(t.title),mime:vStr(t.mime,80),s0:Math.max(0,vNum(t.s0))})).sort((a,b)=>b.date-a.date)}catch(e){return lastTake&&lastTake.songId===songId?[lastTake]:[]}}
 async function updateTakesBtn(){const n=P.song?(await takesFor(P.song.id)).length:0;const b=$('#takesBtn');b.querySelector('span').textContent=n?`Takes (${n})`:'Takes';b.disabled=!n}
 async function playTake(take){
   closeModal();if(P.running)stopRun();stopReplay();
@@ -63,7 +63,7 @@ async function openTakes(){
     <p class="muted" style="margin-top:6px;line-height:1.5">Listen back to hear what your pitch line looked like. Your voice plays with ${isAudio()?'the karaoke track':'a soft guide melody'} behind it.</p>
     <label class="toggle" style="margin-top:12px"><input type="checkbox" id="tkBack" ${S.replayBacking!==false?'checked':''}><span class="sw"></span>Play the backing with my voice</label>
     <div style="margin-top:12px">${list.length?list.map(t=>`<div class="row"><span class="t">${fmt(t.date)}</span><span class="pill ${cls(t.score)}">${t.score}%</span>
-      <button class="btn ghost sm" data-play="${t.id}">▶ Play</button><button class="btn ghost sm" data-dl="${t.id}" title="Download">⬇</button><button class="btn ghost sm" data-rm="${t.id}" title="Delete">✕</button></div>`).join(''):'<div class="empty">No takes yet. Sing this song and your recording appears here.</div>'}</div>
+      <button class="btn ghost sm" data-play="${esc(t.id)}">▶ Play</button><button class="btn ghost sm" data-dl="${esc(t.id)}" title="Download">⬇</button><button class="btn ghost sm" data-rm="${esc(t.id)}" title="Delete">✕</button></div>`).join(''):'<div class="empty">No takes yet. Sing this song and your recording appears here.</div>'}</div>
     <div class="modal-actions"><button class="btn ghost" data-close>Close</button></div>`;
   openModal();
   $('#tkBack').onchange=e=>{S.replayBacking=e.target.checked;saveS()};
@@ -74,6 +74,6 @@ async function openTakes(){
 function downloadTake(t){
   const ext=/mp4/.test(t.mime)?'m4a':/ogg/.test(t.mime)?'ogg':'webm';
   const a=document.createElement('a');a.href=URL.createObjectURL(t.blob);
-  a.download=`${t.title.replace(/[^\w\- ]+/g,'')} - take ${new Date(t.date).toISOString().slice(0,16).replace('T',' ').replace(':','.')}.${ext}`;
+  a.download=`${String(t.title).replace(/[^\w\- ]+/g,'').trim().slice(0,80)||'Tessitura'} - take ${new Date(t.date).toISOString().slice(0,16).replace('T',' ').replace(':','.')}.${ext}`;
   document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
 }
